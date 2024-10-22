@@ -1,0 +1,15 @@
+dependencies:
+  esp-qweb:
+    component_hash: null
+    source:
+      path: C:\Users\philo\Documents\GitHub\esp-qweb
+      type: local
+    version: '*'
+  idf:
+    component_hash: null
+    source:
+      type: idf
+    version: 5.1.1
+manifest_hash: 7e9556c0b0316af7e108b23d3144db30e0cc998e04b24084c8ecf131ac64dcca
+target: esp32
+version: 1.0.0
