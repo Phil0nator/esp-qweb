@@ -103,8 +103,8 @@ static esp_err_t httpd_req_recv_all(httpd_req_t* req, char** dest) {
 
 
 static esp_err_t serv_post_handler(httpd_req_t* req) {
-    char* fpath_beg = req->uri;
-    char* fpath_end = uri_get_fpath_end(fpath_beg);
+    const char* fpath_beg = req->uri;
+    const char* fpath_end = uri_get_fpath_end(fpath_beg);
     size_t fpath_size = fpath_end - fpath_beg;
 
     ESP_LOGI(TAG, "POST: %s", req->uri);
