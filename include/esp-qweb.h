@@ -121,8 +121,11 @@ void qweb_register_post_cb(const char* path, qweb_post_cb_t cb);
  */
 void qweb_cleanup_registry();
 
-
-
+/**
+ * @brief Free all resources used, fully destroy
+ *  the qweb server and files.
+ */
+void qweb_free();
 
 void qweb_init();
 

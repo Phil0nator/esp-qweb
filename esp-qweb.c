@@ -11,7 +11,7 @@
 #define PTR_MIN(a,b)    (((a) < (b)) ? (a) : (b))
 #define FILEPATH_MAX        (256)
 
-static const char* TAG = "http-server";
+static const char* TAG = "qweb-server";
 
 typedef struct http_file_ent {
     const char* fname;
@@ -159,20 +159,19 @@ httpd_uri_t uri_post = {
     .handler = serv_post_handler
 };
 
-
+static httpd_handle_t qweb_server = NULL;
 
 void qweb_init() {
     ESP_LOGI(TAG, "starting webserver");
     esp_err_t err;
-    httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.lru_purge_enable = true;
     config.uri_match_fn = httpd_uri_match_wildcard;
 
     ESP_LOGI(TAG, "starting server on port: '%d'", config.server_port);
-    if ((err = httpd_start(&server,&config)) == ESP_OK) {
-        httpd_register_uri_handler(server, &uri_download);
-        httpd_register_uri_handler(server, &uri_post);
+    if ((err = httpd_start(&qweb_server,&config)) == ESP_OK) {
+        httpd_register_uri_handler(qweb_server, &uri_download);
+        httpd_register_uri_handler(qweb_server, &uri_post);
     } else {
         ESP_ERROR_CHECK(err);
     }
@@ -218,4 +217,21 @@ void qweb_cleanup_registry()
     // cleanup extra capacity
     STC_VEC_CLEANUP(http_file_entries);
     STC_VEC_CLEANUP(http_post_entries);
+}
+
+
+void qweb_free() {
+
+    httpd_stop(qweb_server);
+    free( http_file_entries );
+    http_file_entries = NULL;
+    free( http_post_entries );
+    http_post_entries = NULL;
+
+    STC_VEC_CNT(http_file_entries) = 0;
+    STC_VEC_CAP(http_file_entries) = 0;
+    STC_VEC_CNT(http_post_entries) = 0;
+    STC_VEC_CAP(http_post_entries) = 0;
+
+
 }
