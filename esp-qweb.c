@@ -7,8 +7,10 @@
 
 #include "esp_http_server.h"
 
-
+// Pointer comparison
 #define PTR_MIN(a,b)    (((a) < (b)) ? (a) : (b))
+
+// Internal Maximum
 #define FILEPATH_MAX        (256)
 
 static const char* TAG = "qweb-server";
@@ -115,7 +117,7 @@ static esp_err_t serv_post_handler(httpd_req_t* req) {
             
             httpd_req_recv_all( req, &data);
             
-            qweb_post_cb_ret_t ret = cbent->cb(req->uri, data);
+            qweb_post_cb_ret_t ret = cbent->cb(req->uri, data, req->content_len);
             free(data);
 
             httpd_resp_set_status( req, ret.success ? HTTPD_200 : HTTPD_500 );

@@ -71,8 +71,8 @@ typedef struct qweb_post_cb_ret {
 
 
 
-typedef qweb_post_cb_ret_t (*qweb_post_cb_t)(const char* uri, const char* data);
-#define HTTP_POST_CB(path, cb)  qweb_register_post_cb(path, cb)
+typedef qweb_post_cb_ret_t (*qweb_post_cb_t)(const char* uri, const char* data, size_t data_len);
+#define QWEB_POST_CB(path, cb)  qweb_register_post_cb(path, cb)
 
 /**
  * @brief Identifier for quick lookups of pages
