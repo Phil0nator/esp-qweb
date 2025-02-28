@@ -47,58 +47,58 @@
  * @brief a generic OK response from a post handler
  */
 #define QWEB_POST_RET_OK\
-    ((qweb_post_cb_ret_t){ .data="", .resp_type="text", .success=true, .dynamic=false, .nullterm=true, .size = 0  })
+    ((qweb_post_cb_ret_t){ .s_data="", .resp_type="text", .success=true, .dynamic=false, .nullterm=true, .size = 0  })
 
 /**
  * @brief a generic FAIL response from a post handler
  */
 #define QWEB_POST_RET_FAIL\
-    ((qweb_post_cb_ret_t){ .data="", .resp_type="text", .success=false, .dynamic=false, .nullterm=true, .size = 0  })
+    ((qweb_post_cb_ret_t){ .s_data="", .resp_type="text", .success=false, .dynamic=false, .nullterm=true, .size = 0  })
 
 /**
  * @brief An OK response from a post handler with a static null-terminated string used as data
  */
 #define QWEB_POST_RET_OK_STAT_STR(_data, type)\
-    ((qweb_post_cb_ret_t){ .data=_data, .resp_type=type, .success=true, .dynamic=false, .nullterm=true, .size = 0  })
+    ((qweb_post_cb_ret_t){ .s_data=_data, .resp_type=type, .success=true, .dynamic=false, .nullterm=true, .size = 0  })
 
 /**
  * @brief An OK response from a post handler with a static buffer used as data
  */
 #define QWEB_POST_RET_OK_STAT_BIN(_data, type, _size)\
-    ((qweb_post_cb_ret_t){ .data=_data, .resp_type=type, .success=true, .dynamic=false, .nullterm=false, .size = _size  })
+    ((qweb_post_cb_ret_t){ .s_data=_data, .resp_type=type, .success=true, .dynamic=false, .nullterm=false, .size = _size  })
 
 /**
  * @brief An OK response from a post handler with a dynamic (malloc'd) null terminated string as data
  * @note the string will be free'd by qweb after it is sent to the client
  */
 #define QWEB_POST_RET_OK_DYN_STR(_data, type)\
-    ((qweb_post_cb_ret_t){ .data=_data, .resp_type=type, .success=true, .dynamic=true, .nullterm=true, .size = 0  })
+    ((qweb_post_cb_ret_t){ .d_data=_data, .resp_type=type, .success=true, .dynamic=true, .nullterm=true, .size = 0  })
     
 /**
  * @brief An OK response from a post handler with a dynamic (malloc'd) buffer as data
  * @note the buffer will be free'd by qweb after it is sent to the client
  */
 #define QWEB_POST_RET_OK_DYN_BIN(_data, type, _size)\
-    ((qweb_post_cb_ret_t){ .data=_data, .resp_type=type, .success=true, .dynamic=true, .nullterm=false, .size = _size  })
+    ((qweb_post_cb_ret_t){ .d_data=_data, .resp_type=type, .success=true, .dynamic=true, .nullterm=false, .size = _size  })
 
 /**
  * @brief A FAIL response from a post handler with a static null-terminated string used as data
  */
 #define QWEB_POST_RET_FAIL_STAT_STR(_data, type)\
-    ((qweb_post_cb_ret_t){ .data=_data, .resp_type=type, .success=false, .dynamic=false, .nullterm=true, .size = 0  })
+    ((qweb_post_cb_ret_t){ .s_data=_data, .resp_type=type, .success=false, .dynamic=false, .nullterm=true, .size = 0  })
 
 /**
  * @brief A FAIL response from a post handler with a static buffer used as data
  */
 #define QWEB_POST_RET_FAIL_STAT_BIN(_data, type, _size)\
-    ((qweb_post_cb_ret_t){ .data=_data, .resp_type=type, .success=false, .dynamic=false, .nullterm=false, .size = _size  })
+    ((qweb_post_cb_ret_t){ .s_data=_data, .resp_type=type, .success=false, .dynamic=false, .nullterm=false, .size = _size  })
 
 /**
  * @brief A FAIL response from a post handler with a dynamic (malloc'd) null terminated string as data
  * @note the string will be free'd by qweb after it is sent to the client
  */
 #define QWEB_POST_RET_FAIL_DYN_STR(_data, type)\
-    ((qweb_post_cb_ret_t){ .data=_data, .resp_type=type, .success=false, .dynamic=true, .nullterm=true, .size = 0  })
+    ((qweb_post_cb_ret_t){ .d_data=_data, .resp_type=type, .success=false, .dynamic=true, .nullterm=true, .size = 0  })
 
     
 /**
@@ -106,7 +106,7 @@
  * @note the buffer will be free'd by qweb after it is sent to the client
  */
 #define QWEB_POST_RET_FAIL_DYN_BIN(_data, type, _size)\
-    ((qweb_post_cb_ret_t){ .data=_data, .resp_type=type, .success=false, .dynamic=true, .nullterm=false, .size = _size  })
+    ((qweb_post_cb_ret_t){ .d_data=_data, .resp_type=type, .success=false, .dynamic=true, .nullterm=false, .size = _size  })
 
 
 /**
@@ -114,7 +114,12 @@
  *  (must be freeable)
  */
 typedef struct qweb_post_cb_ret {
-    char* data;                 // content
+
+    union {
+        const char* s_data;     // static content
+        char* d_data;           // dynamic content
+    };
+    
     const char* resp_type;      // e.g: text/json
     bool success: 1;            // send 200 OK, or 500 Internal Server Error
     bool dynamic: 1;            // was data dynamically allocated
