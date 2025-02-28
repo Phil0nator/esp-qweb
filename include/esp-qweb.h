@@ -133,13 +133,23 @@ typedef struct qweb_post_cb_ret {
  */
 typedef qweb_post_cb_ret_t (*qweb_post_cb_t)(const char* uri, const char* data, size_t data_len);
 
+
+
+typedef struct qweb_post_handler {
+    qweb_post_cb_t cb;
+    bool supress_log: 1;
+} qweb_post_handler_t;
+
+#define QWEB_POST_HANDLER_DEFAULT(_cb)   (qweb_post_handler_t) { .cb=_cb, .supress_log = false }
+
+
 /**
  * @brief Register a callback for a POST request to a given path
  * 
  * @param path path to register
- * @param cb callback
+ * @param handler post handler
  */
-#define QWEB_POST_CB(path, cb)  qweb_register_post_cb(path, cb)
+#define QWEB_POST_CB(path, handler)  qweb_register_post_cb(path, handler)
 
 /**
  * @brief Identifier for quick lookups of pages
@@ -178,7 +188,7 @@ void qweb_page_trunc_path(const char* fpath, size_t length);
  * @param path path to register
  * @param cb callback
  */
-void qweb_register_post_cb(const char* path, qweb_post_cb_t cb);
+void qweb_register_post_cb(const char* path, qweb_post_handler_t handler);
 
 
 /**

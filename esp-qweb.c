@@ -31,6 +31,7 @@ typedef struct http_file_ent {
 typedef struct http_post_cb_entry {
     const char* fpath;              // file name or path used to POST to this handler
     qweb_post_cb_t cb;              // callback function to handle requests
+    bool supress_log: 1;            // supress logs about this post
 } http_post_cb_entry_t;
 
 /**
@@ -145,7 +146,6 @@ static esp_err_t serv_post_handler(httpd_req_t* req) {
     const char* fpath_end = uri_get_fpath_end(fpath_beg);
     size_t fpath_size = fpath_end - fpath_beg;
 
-    ESP_LOGI(TAG, "POST: %s", req->uri);
 
     // Search file system for a post request handler with the correct fpath
     const http_post_cb_entry_t* cbent = http_post_cb_get_entry(fpath_beg, fpath_size);
@@ -155,6 +155,10 @@ static esp_err_t serv_post_handler(httpd_req_t* req) {
         // Ensure that the maximum data content size is not exceeded
         if (req->content_len < QWEB_MAX_CONTENT_RECEIVE) {
             
+            if (!cbent->supress_log) {
+                ESP_LOGI(TAG, "POST: %s", req->uri);
+            }
+
             // Load the entire data
             char *data;
             httpd_req_recv_all( req, &data);
@@ -188,7 +192,7 @@ static esp_err_t serv_post_handler(httpd_req_t* req) {
             );
         }
     } else {
-        ESP_LOGE(TAG, "Could not find post callback for %s", fpath_beg);
+        ESP_LOGE(TAG, "Could not find post callback for POST %s", fpath_beg);
     } 
 
     // Reply error to the client
@@ -246,11 +250,11 @@ qweb_server_page_id_t qweb_register_page(const char* fpath, const char* ctype, c
     STC_VEC_PUSH(http_file_entries, entry);
     return STC_VEC_CNT(http_file_entries) - 1;
 }
-void qweb_register_post_cb(const char *path, qweb_post_cb_t cb)
+void qweb_register_post_cb(const char *path, qweb_post_handler_t handler)
 {
     http_post_cb_entry_t entry = {
         .fpath = path,
-        .cb=cb
+        .cb=handler.cb
     };
 
     STC_VEC_PUSH(http_post_entries, entry);
@@ -279,15 +283,7 @@ void qweb_cleanup_registry()
 void qweb_free() {
 
     httpd_stop(qweb_server);
-    free( http_file_entries );
-    http_file_entries = NULL;
-    free( http_post_entries );
-    http_post_entries = NULL;
-
-    STC_VEC_CNT(http_file_entries) = 0;
-    STC_VEC_CAP(http_file_entries) = 0;
-    STC_VEC_CNT(http_post_entries) = 0;
-    STC_VEC_CAP(http_post_entries) = 0;
-
+    STC_VEC_FREE(http_file_entries);
+    STC_VEC_FREE(http_post_entries);
 
 }

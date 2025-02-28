@@ -87,4 +87,8 @@
 #define STC_VEC_FOREACH(iname, vect)    for(size_t iname = 0; iname < STC_VEC_CNT(vect); iname++)
 
 
+#define STC_VEC_FREE(vect) free(vect); vect = NULL;\
+                            STC_VEC_CAP(vect) = 0; \
+                            STC_VEC_CNT(vect) = 0
+
 #endif
