@@ -260,7 +260,8 @@ void qweb_register_post_cb(const char *path, qweb_post_handler_t handler)
 {
     http_post_cb_entry_t entry = {
         .fpath = path,
-        .cb=handler.cb
+        .cb = handler.cb,
+        .supress_log = handler.supress_log
     };
 
     STC_VEC_PUSH(http_post_entries, entry);
