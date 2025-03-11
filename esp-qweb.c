@@ -175,13 +175,16 @@ static esp_err_t serv_post_handler(httpd_req_t* req) {
             
             // Send the response
             // (determine if we need to provide the data size or use the null terminator)
-            ESP_ERROR_CHECK(
-                httpd_resp_send(
-                    req, 
-                    ret.dynamic ? ret.d_data : ret.s_data , 
-                    ret.nullterm ? HTTPD_RESP_USE_STRLEN : ret.size 
-                )
+            
+            esp_err_t send_err = httpd_resp_send(
+                req, 
+                ret.dynamic ? ret.d_data : ret.s_data , 
+                ret.nullterm ? HTTPD_RESP_USE_STRLEN : ret.size 
             );
+
+            if (send_err != ESP_OK) {
+                ESP_LOGE(TAG, "Could not send resonse, got ESP_ERROR: (%d)", send_err);
+            }
 
             // For qweb_post_cb_ret_t responses with a dynamic buffer, it needs to be freed 
             if (ret.dynamic) {
