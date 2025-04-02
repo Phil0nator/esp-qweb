@@ -4,3 +4,6 @@ url: "https://github.com/Phil0nator/esp-qweb"
 dependencies:
   idf:
     version: ">=5.0"
+  lightweight-collections:
+    version: "main"
+    git: "https://github.com/Phil0nator/lightweight-collections"
