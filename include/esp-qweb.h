@@ -55,27 +55,29 @@
 
 /**
  * @brief Register a file with the http server
+ * @param server server to register to
  * @param path path to register the file at
  * @param type mime type
  * @param embed_name the identifier generated for the embedded data
  *  (see https://docs.espressif.com/projects/esp-idf/en/v5.1.4/esp32/api-guides/build-system.html#embedding-binary-data)
  */
-#define QWEB_FILE(path, type, embed_name) do {\
+#define QWEB_FILE(server, path, type, embed_name) do {\
     extern const char embed_name##_start[] asm("_binary_" __STRING(embed_name) "_start");\
     extern const char embed_name##_end[] asm("_binary_" __STRING(embed_name) "_end");\
-    qweb_register_file(path, type, embed_name##_start, embed_name##_end - embed_name##_start);}\
+    qweb_register_file(server, path, type, embed_name##_start, embed_name##_end - embed_name##_start);}\
     while (0)
 
 
 /**
  * @brief Register a dynamic buffer as a file with the server
+ * @param server server to register to
  * @param path path to register the dynamic buffer at
  * @param type mime type
  * @param databuffer buffer pointer
  * @param starting_len length of data
  */
-#define QWEB_FILE_DYN(path, type, databuffer, starting_len) \
-    qweb_register_file(path, type, databuffer, starting_len)
+#define QWEB_FILE_DYN(server, path, type, databuffer, starting_len) \
+    qweb_register_file(server, path, type, databuffer, starting_len)
 
 
 /**
