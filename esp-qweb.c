@@ -223,13 +223,19 @@ static esp_err_t serv_post_handler(httpd_req_t* req) {
 
 }
 
+
+bool qweb_uri_match_always(const char*, const char*, size_t) {
+    return true;
+}
+
+
 #ifdef CONFIG_QWEB_EN_SSL
 esp_err_t qweb_start_ssl(qweb_server_t* server, const qweb_server_config_t *qweb_cfg) {
 
     httpd_ssl_config_t ssl_cfg = HTTPD_SSL_CONFIG_DEFAULT();
     
     ssl_cfg.httpd.lru_purge_enable = true;
-    ssl_cfg.httpd.uri_match_fn = httpd_uri_match_wildcard;
+    ssl_cfg.httpd.uri_match_fn = qweb_uri_match_always;
     ssl_cfg.httpd.server_port = qweb_cfg->port;
     ssl_cfg.httpd.max_open_sockets = qweb_cfg->max_sockets;
     ssl_cfg.httpd.stack_size = qweb_cfg->stack_size;
@@ -251,7 +257,7 @@ qweb_server_t* qweb_init(const qweb_server_config_t* cfg) {
     esp_err_t err;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.lru_purge_enable = true;
-    config.uri_match_fn = httpd_uri_match_wildcard;
+    config.uri_match_fn = qweb_uri_match_always;
     config.server_port = cfg->port;
     config.max_open_sockets = cfg->max_sockets;
     config.stack_size = cfg->stack_size;
