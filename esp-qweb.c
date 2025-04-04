@@ -7,6 +7,12 @@
 
 #include "esp_http_server.h"
 
+#ifdef CONFIG_QWEB_EN_SSL
+#include "esp_https_server.h"
+#endif
+
+#include "lcl_hmap.h"
+
 // Pointer comparison
 #define PTR_MIN(a,b)    (((a) < (b)) ? (a) : (b))
 
@@ -34,36 +40,24 @@ typedef struct http_post_cb_entry {
     bool supress_log: 1;            // supress logs about this post
 } http_post_cb_entry_t;
 
-/**
- * @brief Construct a new stc vec decl object for post request handler entries
- */
-STC_VEC_DECL( http_post_cb_entry_t, http_post_entries );
+typedef struct qweb_server {
+    const char* name;
+    lcl_hmap_t* files;
+    lcl_hmap_t* post_cbs;
 
-/**
- * @brief Construct a new stc vec decl object for file entries
- */
-STC_VEC_DECL( http_file_ent_t, http_file_entries );
+    size_t max_recvlen;
+
+    httpd_uri_t get_uri;
+    httpd_uri_t post_uri;
+
+    #ifdef CONFIG_QWEB_EN_SSL
+    bool ssl;
+    #endif
+    httpd_handle_t httpd;
+    
+} qweb_server_t;
 
 
-static http_file_ent_t* http_file_get_entry(const char* fpath, size_t fpath_size) {
-    STC_VEC_FOREACH( i, http_file_entries ) {
-        if (strncmp(http_file_entries[i].fname, fpath, fpath_size) == 0) {
-            return &http_file_entries[i];
-        }
-    }
-
-    return NULL;
-}
-
-static const http_post_cb_entry_t* http_post_cb_get_entry(const char* fpath, size_t fpath_size) {
-    STC_VEC_FOREACH(i, http_post_entries) {
-        if (strncmp(http_post_entries[i].fpath, fpath, fpath_size) == 0) {
-            return &http_post_entries[i];
-        }
-    }
-
-    return NULL;
-}
 
 static const char* uri_get_fpath_end( const char* uri ) {
 
@@ -79,7 +73,7 @@ static const char* uri_get_fpath_end( const char* uri ) {
 
 /**
  * @brief global handler for all get requests.
- *  This function will search the page file system for the correct page
+ *  This function will search the file system for the correct file
  *  and send it to the client.
  */
 static esp_err_t serv_get_handler(httpd_req_t* req) {
@@ -89,11 +83,18 @@ static esp_err_t serv_get_handler(httpd_req_t* req) {
     size_t fpath_size = fpath_end - fpath_beg;
 
     ESP_LOGI(TAG, "GET: %s", req->uri);
+    char* fpath = malloc(fpath_size+1);
+    strncpy(fpath, fpath_beg, fpath_size);
+    fpath[fpath_size] = '\0';
 
-    // Search the file system for a page entry with the correct fpath
-    const http_file_ent_t* content = http_file_get_entry( fpath_beg, fpath_size );
+    qweb_server_t* server = (qweb_server_t*) req->user_ctx;
+    const http_file_ent_t* content;
+    lcl_any_t content_any = NULL;
+    lcl_hmap_get( server->files, fpath, &content_any ); // error handled later
+    free(fpath);
+    content = lcl_any2ptr(content_any);
 
-    // If the page exists
+    // If the file exists
     if (content) {
         // Construct reply
         httpd_resp_set_status(req, HTTPD_200);
@@ -105,7 +106,7 @@ static esp_err_t serv_get_handler(httpd_req_t* req) {
         ESP_ERROR_CHECK( httpd_resp_send(req, content->content, content->content_length));
 
     } else {
-        // 404 for pages that don't exist
+        // 404 for files that don't exist
         httpd_resp_send_404(req);
     }
 
@@ -146,14 +147,26 @@ static esp_err_t serv_post_handler(httpd_req_t* req) {
     const char* fpath_end = uri_get_fpath_end(fpath_beg);
     size_t fpath_size = fpath_end - fpath_beg;
 
+    qweb_server_t* server = (qweb_server_t*) req->user_ctx;
+    
+    char* fpath = malloc(fpath_size+1);
+    strncpy(fpath, fpath_beg, fpath_size);
+    fpath[fpath_size] = '\0';
+
+    const http_post_cb_entry_t* cbent;
+    lcl_any_t cbent_any = NULL;
+    lcl_hmap_get( server->post_cbs, fpath, &cbent_any ); // error handling done later
+    free(fpath);
+
+    cbent = lcl_any2ptr(cbent_any);
 
     // Search file system for a post request handler with the correct fpath
-    const http_post_cb_entry_t* cbent = http_post_cb_get_entry(fpath_beg, fpath_size);
+    // const http_post_cb_entry_t* cbent = http_post_cb_get_entry(fpath_beg, fpath_size);
     
     // If found...
     if (cbent) {
         // Ensure that the maximum data content size is not exceeded
-        if (req->content_len < QWEB_MAX_CONTENT_RECEIVE) {
+        if (req->content_len < server->max_recvlen) {
             
             if (!cbent->supress_log) {
                 ESP_LOGI(TAG, "POST: %s", req->uri);
@@ -197,7 +210,7 @@ static esp_err_t serv_post_handler(httpd_req_t* req) {
                 TAG, 
                 "Attempted to post content of length %ub, which is too large for the http-server buffer size %ub", 
                 req->content_len, 
-                QWEB_MAX_CONTENT_RECEIVE
+                server->max_recvlen
             );
         }
     } else {
@@ -210,56 +223,110 @@ static esp_err_t serv_post_handler(httpd_req_t* req) {
 
 }
 
-httpd_uri_t uri_download = {
-    .method = HTTP_GET,
-    .uri = "/*",
-    .user_ctx = NULL,
-    .handler = serv_get_handler
-};
+#ifdef CONFIG_QWEB_EN_SSL
+esp_err_t qweb_start_ssl(qweb_server_t* server, const qweb_server_config_t *qweb_cfg) {
 
-httpd_uri_t uri_post = {
-    .method = HTTP_POST,
-    .uri = "/*",
-    .user_ctx = NULL,
-    .handler = serv_post_handler
-};
+    httpd_ssl_config_t ssl_cfg = HTTPD_SSL_CONFIG_DEFAULT();
+    
+    ssl_cfg.httpd.lru_purge_enable = true;
+    ssl_cfg.httpd.uri_match_fn = httpd_uri_match_wildcard;
+    ssl_cfg.httpd.server_port = qweb_cfg->port;
+    ssl_cfg.httpd.max_open_sockets = qweb_cfg->max_sockets;
+    ssl_cfg.httpd.stack_size = qweb_cfg->stack_size;
 
-// Handler for the global qweb httpd instance
-static httpd_handle_t qweb_server = NULL;
+    ssl_cfg.servercert = qweb_cfg->ssl_config.cert;
+    ssl_cfg.servercert_len = qweb_cfg->ssl_config.certlen;
+    ssl_cfg.prvtkey_pem = qweb_cfg->ssl_config.privkey;
+    ssl_cfg.prvtkey_len = qweb_cfg->ssl_config.privkeylen;
 
-void qweb_init() {
+    server->ssl = true;
+
+    return httpd_ssl_start(&server->httpd, &ssl_cfg);
+}
+#endif
+
+qweb_server_t* qweb_init(const qweb_server_config_t* cfg) {
 
     ESP_LOGI(TAG, "starting webserver");
     esp_err_t err;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.lru_purge_enable = true;
     config.uri_match_fn = httpd_uri_match_wildcard;
+    config.server_port = cfg->port;
+    config.max_open_sockets = cfg->max_sockets;
+    config.stack_size = cfg->stack_size;
+
+    qweb_server_t* server = calloc(sizeof(qweb_server_t), 1);
+
+    server->name = cfg->name;
+    server->max_recvlen = cfg->max_recvlen;
+    
+
+    httpd_uri_t get_uri = {
+        .method = HTTP_GET,
+        .uri = "/*",
+        .user_ctx = server,
+        .handler = serv_get_handler
+    };
+    
+    httpd_uri_t post_uri = {
+        .method = HTTP_POST,
+        .uri = "/*",
+        .user_ctx = server,
+        .handler = serv_post_handler
+    };
+
+    server->get_uri = get_uri;
+    server->post_uri = post_uri;
+    lcl_hmap_init(&server->files, lcl_hash_djb2, lcl_streq);
+    lcl_hmap_init(&server->post_cbs, lcl_hash_djb2, lcl_streq);
+    
 
     ESP_LOGI(TAG, "starting server on port: '%d'", config.server_port);
-    if ((err = httpd_start(&qweb_server,&config)) == ESP_OK) {
-        // Register handler for all pages
-        httpd_register_uri_handler(qweb_server, &uri_download);
-        // Register handler for all post requests
-        httpd_register_uri_handler(qweb_server, &uri_post);
-    } else {
+
+
+#ifdef CONFIG_QWEB_EN_SSL
+    if (cfg->ssl) {
+        if ((err = qweb_start_ssl(server, cfg)) != ESP_OK) {
+            ESP_ERROR_CHECK(err);
+        }
+    } else
+#endif
+    if ((err = httpd_start(&server->httpd,&config)) != ESP_OK) {
         ESP_ERROR_CHECK(err);
     }
+
+    
+    // Register handler for all files
+    httpd_register_uri_handler(server->httpd, &server->get_uri);
+    // Register handler for all post requests
+    httpd_register_uri_handler(server->httpd, &server->post_uri);
+
+    return server;
 
 }
 
 
-qweb_server_page_id_t qweb_register_page(const char* fpath, const char* ctype, const char* content, size_t content_length) {
+void qweb_register_file(qweb_server_t* server, const char* fpath, const char* ctype, const char* content, size_t content_length) {
     http_file_ent_t entry = {
         .fname = fpath,
         .type = ctype,
         .content = content,
         .content_length = content_length
     };
-    ESP_LOGI(TAG, "Registering page \"%s\" -> \"%s\"    : (%d/%d)", fpath, ctype, STC_VEC_CNT(http_file_entries), STC_VEC_CAP(http_file_entries));
-    STC_VEC_PUSH(http_file_entries, entry);
-    return STC_VEC_CNT(http_file_entries) - 1;
+    ESP_LOGI(TAG, "Registering file \"%s\" -> \"%s\"", fpath, ctype);
+    http_file_ent_t *ent_alloc = (http_file_ent_t*) malloc(sizeof(http_file_ent_t));
+    *ent_alloc = entry;
+    
+    bool old_w;
+    lcl_any_t old;
+    lcl_hmap_insert( server->files, (lcl_any_t) fpath, ent_alloc, &old, &old_w );
+    if (old_w) {
+        free(old);
+    }
+    
 }
-void qweb_register_post_cb(const char *path, qweb_post_handler_t handler)
+void qweb_register_post_cb(qweb_server_t* server, const char *path, qweb_post_handler_t handler)
 {
     http_post_cb_entry_t entry = {
         .fpath = path,
@@ -267,33 +334,57 @@ void qweb_register_post_cb(const char *path, qweb_post_handler_t handler)
         .supress_log = handler.supress_log
     };
 
-    STC_VEC_PUSH(http_post_entries, entry);
-    ESP_LOGI(TAG, "registering post callback: { \"%s\" }    (%u/%u)", path, STC_VEC_CNT(http_post_entries) - 1, STC_VEC_CAP(http_post_entries));
+    ESP_LOGI(TAG, "registering post callback: { \"%s\" } ", path);
+    
+    http_post_cb_entry_t *ent_alloc = (http_post_cb_entry_t*) malloc(sizeof(http_post_cb_entry_t));
+    *ent_alloc = entry;
+    
+    bool old_w;
+    lcl_any_t old;
+    lcl_hmap_insert( server->post_cbs, (lcl_any_t) path, ent_alloc, &old, &old_w );
+    if (old_w) {
+        free(old);
+    }
+
 
 }
 
-void qweb_page_trunc(qweb_server_page_id_t page, size_t content_length) {
-    http_file_entries[page].content_length = content_length;
+esp_err_t qweb_unregister_file(qweb_server_t *server, const char *path)
+{
+    lcl_any_t file_ent = NULL;
+    lcl_hmap_remove(server->files, path, NULL, &file_ent);
+    free(file_ent);
+    return LCL_OK;
 }
-void qweb_page_trunc_path(const char* fpath, size_t length) {
-    http_file_ent_t* entry = http_file_get_entry( fpath, strlen(fpath) );
-    if (entry) {
-        entry->content_length = length;
+
+esp_err_t qweb_unregister_post_cb(qweb_server_t *server, const char *path)
+{
+    lcl_any_t cb_ent = NULL;
+    lcl_hmap_remove(server->post_cbs, path, NULL, &cb_ent);
+    free(cb_ent);
+    return LCL_OK;
+}
+
+void qweb_file_trunc_path(qweb_server_t* server, const char* fpath, size_t length) {
+    http_file_ent_t* content;
+    lcl_any_t content_any = NULL;
+    lcl_hmap_get( server->files, (lcl_any_t) fpath, &content_any ); // error handled later
+    content = lcl_any2ptr(content_any);
+    if (content) {
+        content->content_length = length;
     }
 }
 
-void qweb_cleanup_registry()
-{
-    // cleanup extra capacity
-    STC_VEC_CLEANUP(http_file_entries);
-    STC_VEC_CLEANUP(http_post_entries);
-}
 
 
-void qweb_free() {
+void qweb_free(qweb_server_t* server) {
 
-    httpd_stop(qweb_server);
-    STC_VEC_FREE(http_file_entries);
-    STC_VEC_FREE(http_post_entries);
+#ifdef CONFIG_QWEB_EN_SSL
+    if (server->ssl) httpd_ssl_stop(server->httpd);
+    else
+#endif
+    httpd_stop(server->httpd);
+    lcl_hmap_free(&server->files, NULL, LCL_DEALLOC_FREE);
+    lcl_hmap_free(&server->post_cbs, NULL, LCL_DEALLOC_FREE);
 
 }

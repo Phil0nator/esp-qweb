@@ -1,15 +1,32 @@
 dependencies:
   esp-qweb:
-    component_hash: null
+    dependencies:
+    - name: idf
+      version: '>=5.0'
+    - git: https://github.com/Phil0nator/lightweight-collections
+      name: lightweight-collections
+      version: main
     source:
       path: C:\Users\philo\Documents\GitHub\esp-qweb
       type: local
-    version: '*'
+    version: 1.0.0
   idf:
-    component_hash: null
     source:
       type: idf
-    version: 5.1.1
-manifest_hash: 7e9556c0b0316af7e108b23d3144db30e0cc998e04b24084c8ecf131ac64dcca
+    version: 5.3.1
+  lightweight-collections:
+    component_hash: c7be17b3150b15abefb3e81d1a970e9340c32ddf4027b940bff0e4fc795ed332
+    dependencies:
+    - name: idf
+      version: '>=5.0'
+    source:
+      git: https://github.com/Phil0nator/lightweight-collections
+      path: .
+      type: git
+    version: 592853f914cc7ff5fdb272beae1ce814bc7b2734
+direct_dependencies:
+- esp-qweb
+- idf
+manifest_hash: 214fe48042f1027ef8bd12fe1138df7f4d11b750e42412824db64aecd47f6bd0
 target: esp32
-version: 1.0.0
+version: 2.0.0
