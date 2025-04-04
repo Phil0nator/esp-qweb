@@ -1,0 +1,5 @@
+menu "qweb"
+    config QWEB_EN_SSL
+        bool "Enable HTTPS Implementation"
+        default n
+endmenu

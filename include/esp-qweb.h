@@ -151,10 +151,32 @@ typedef struct qweb_server_config {
     uint16_t max_sockets;
     size_t max_recvlen;
     const char* name;
+#ifdef CONFIG_QWEB_EN_SSL
+    bool ssl;
+    struct {
+        const uint8_t* cert;
+        size_t certlen;
+        const uint8_t* privkey;
+        size_t privkeylen;
+    } ssl_config;
+#endif
 } qweb_server_config_t;
 
 #define QWEB_SERVER_CFG_DEFAULT(_name) (qweb_server_config_t)\
     { .port = 80, .stack_size = 4096, .max_sockets = 7, .max_recvlen = QWEB_MAX_CONTENT_RECEIVE, .name = _name }
+
+#ifdef CONFIG_QWEB_EN_SSL
+#define QWEB_SSL_SERVER_CFG_DEFAULT(_name)  (qweb_server_config_t)\
+    { .port = 0, .stack_size = 10240, .max_sockets = 4, .max_recvlen = QWEB_MAX_CONTENT_RECEIVE, .name = _name, .ssl = true }
+#endif
+
+#define QWEB_ASSIGN_EMBEDDED(destbegin, destlen, embed_name) do {\
+    extern const char embed_name##_start[] asm("_binary_" __STRING(embed_name) "_start");\
+    extern const char embed_name##_end[] asm("_binary_" __STRING(embed_name) "_end");\
+    destbegin = (embed_name##_start);\
+    destlen = ((embed_name##_end)-(embed_name##start)); }\
+    while (0)
+
 
 
 qweb_server_t* qweb_init(const qweb_server_config_t* config);
@@ -199,15 +221,6 @@ typedef struct qweb_post_handler {
 
 
 /**
- * @brief Register a callback for a POST request to a given path
- * 
- * @param path path to register
- * @param handler post handler
- */
-#define QWEB_POST_CB(path, handler)  qweb_register_post_cb(path, handler)
-
-
-/**
  * @brief Register a file with the server's internal file system
  * 
  * @param fpath path to register to
@@ -233,6 +246,8 @@ void qweb_file_trunc_path(qweb_server_t* server, const char* fpath, size_t lengt
  */
 void qweb_register_post_cb(qweb_server_t* server, const char* path, qweb_post_handler_t handler);
 
+esp_err_t qweb_unregister_file(qweb_server_t* server, const char* path);
+esp_err_t qweb_unregister_post_cb(qweb_server_t* server, const char* path);
 
 /**
  * @brief Free all resources used, fully destroy

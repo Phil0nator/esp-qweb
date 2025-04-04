@@ -6,6 +6,11 @@
 #include "esp_err.h"
 
 #include "esp_http_server.h"
+
+#ifdef CONFIG_QWEB_EN_SSL
+#include "esp_https_server.h"
+#endif
+
 #include "lcl_hmap.h"
 
 // Pointer comparison
@@ -42,9 +47,13 @@ typedef struct qweb_server {
 
     size_t max_recvlen;
 
-    httpd_handle_t httpd;
     httpd_uri_t get_uri;
     httpd_uri_t post_uri;
+
+    #ifdef CONFIG_QWEB_EN_SSL
+    bool ssl;
+    #endif
+    httpd_handle_t httpd;
     
 } qweb_server_t;
 
@@ -214,7 +223,27 @@ static esp_err_t serv_post_handler(httpd_req_t* req) {
 
 }
 
+#ifdef CONFIG_QWEB_EN_SSL
+esp_err_t qweb_start_ssl(qweb_server_t* server, const qweb_server_config_t *qweb_cfg) {
 
+    httpd_ssl_config_t ssl_cfg = HTTPD_SSL_CONFIG_DEFAULT();
+    
+    ssl_cfg.httpd.lru_purge_enable = true;
+    ssl_cfg.httpd.uri_match_fn = httpd_uri_match_wildcard;
+    ssl_cfg.httpd.server_port = qweb_cfg->port;
+    ssl_cfg.httpd.max_open_sockets = qweb_cfg->max_sockets;
+    ssl_cfg.httpd.stack_size = qweb_cfg->stack_size;
+
+    ssl_cfg.servercert = qweb_cfg->ssl_config.cert;
+    ssl_cfg.servercert_len = qweb_cfg->ssl_config.certlen;
+    ssl_cfg.prvtkey_pem = qweb_cfg->ssl_config.privkey;
+    ssl_cfg.prvtkey_len = qweb_cfg->ssl_config.privkeylen;
+
+    server->ssl = true;
+
+    return httpd_ssl_start(&server->httpd, &ssl_cfg);
+}
+#endif
 
 qweb_server_t* qweb_init(const qweb_server_config_t* cfg) {
 
@@ -223,14 +252,14 @@ qweb_server_t* qweb_init(const qweb_server_config_t* cfg) {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.lru_purge_enable = true;
     config.uri_match_fn = httpd_uri_match_wildcard;
+    config.server_port = cfg->port;
+    config.max_open_sockets = cfg->max_sockets;
+    config.stack_size = cfg->stack_size;
 
     qweb_server_t* server = calloc(sizeof(qweb_server_t), 1);
 
-    config.server_port = cfg->port;
-    config.max_open_sockets = cfg->max_sockets;
     server->name = cfg->name;
     server->max_recvlen = cfg->max_recvlen;
-    config.stack_size = cfg->stack_size;
     
 
     httpd_uri_t get_uri = {
@@ -251,16 +280,27 @@ qweb_server_t* qweb_init(const qweb_server_config_t* cfg) {
     server->post_uri = post_uri;
     lcl_hmap_init(&server->files, lcl_hash_djb2, lcl_streq);
     lcl_hmap_init(&server->post_cbs, lcl_hash_djb2, lcl_streq);
+    
 
     ESP_LOGI(TAG, "starting server on port: '%d'", config.server_port);
-    if ((err = httpd_start(&server->httpd,&config)) == ESP_OK) {
-        // Register handler for all files
-        httpd_register_uri_handler(server->httpd, &server->get_uri);
-        // Register handler for all post requests
-        httpd_register_uri_handler(server->httpd, &server->post_uri);
-    } else {
+
+
+#ifdef CONFIG_QWEB_EN_SSL
+    if (cfg->ssl) {
+        if ((err = qweb_start_ssl(server, cfg)) != ESP_OK) {
+            ESP_ERROR_CHECK(err);
+        }
+    } else
+#endif
+    if ((err = httpd_start(&server->httpd,&config)) != ESP_OK) {
         ESP_ERROR_CHECK(err);
     }
+
+    
+    // Register handler for all files
+    httpd_register_uri_handler(server->httpd, &server->get_uri);
+    // Register handler for all post requests
+    httpd_register_uri_handler(server->httpd, &server->post_uri);
 
     return server;
 
@@ -325,6 +365,10 @@ void qweb_file_trunc_path(qweb_server_t* server, const char* fpath, size_t lengt
 
 void qweb_free(qweb_server_t* server) {
 
+#ifdef CONFIG_QWEB_EN_SSL
+    if (server->ssl) httpd_ssl_stop(server->httpd);
+    else
+#endif
     httpd_stop(server->httpd);
     lcl_hmap_free(&server->files, NULL, LCL_DEALLOC_FREE);
     lcl_hmap_free(&server->post_cbs, NULL, LCL_DEALLOC_FREE);
