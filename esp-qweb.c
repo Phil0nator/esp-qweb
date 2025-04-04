@@ -349,7 +349,21 @@ void qweb_register_post_cb(qweb_server_t* server, const char *path, qweb_post_ha
 
 }
 
+esp_err_t qweb_unregister_file(qweb_server_t *server, const char *path)
+{
+    lcl_any_t file_ent = NULL;
+    lcl_hmap_remove(server->files, path, NULL, &file_ent);
+    free(file_ent);
+    return LCL_OK;
+}
 
+esp_err_t qweb_unregister_post_cb(qweb_server_t *server, const char *path)
+{
+    lcl_any_t cb_ent = NULL;
+    lcl_hmap_remove(server->post_cbs, path, NULL, &cb_ent);
+    free(cb_ent);
+    return LCL_OK;
+}
 
 void qweb_file_trunc_path(qweb_server_t* server, const char* fpath, size_t length) {
     http_file_ent_t* content;

@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <stdbool.h>
+#include "esp_err.h"
 
 /**
  * @brief Default maximum amount receivable by the web server
